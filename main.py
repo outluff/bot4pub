@@ -121,9 +121,9 @@ def get_text(message):
 
 
 @bot.message_handler(func=lambda message: True)
-def insert_booking(data, time, chel):
-    cur.execute("INSERT INTO bron' (date, time, chel) VALUES (%s, %s, %s )", (data, time, chel))
-    con.commit()
+#def insert_booking(data, time, chel):
+    #cur.execute("INSERT INTO bron' (date, time, chel) VALUES (%s, %s, %s )", (data, time, chel))
+    #con.commit()
 
 
 def data(message):
