@@ -3,6 +3,7 @@ import configure
 from telebot import types
 import re
 import sqlite3
+import random
 
 con = sqlite3.connect("test.db", check_same_thread=False)
 cur = con.cursor()
@@ -46,9 +47,9 @@ def answer(call):
 
 @bot.message_handler(content_types=['text'])
 def get_text(message):
-    # if message.text == 'Код авторизации':
-    # bot.send_message(message.chat.id, 'Ваш код авторизации: ', randint(0, 1500))
-    if message.text == 'Где вы находитесь?':
+    if message.text == 'Код авторизации':
+        return chislo(message)
+    elif message.text == 'Где вы находитесь?':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         item1 = types.KeyboardButton('На карте')
         back = types.KeyboardButton('Меню')
@@ -88,14 +89,16 @@ def get_text(message):
         bot.send_message(message.chat.id, 'Выбирай', reply_markup=markup_reply)
     elif message.text == 'Новая бронь':
         return data(message)
+    #elif message.text == 'Редактировать бронирование':
+        #return editbron(message)
+
     elif message.text == 'Отзывы и предложения':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         item1 = types.KeyboardButton(text='Новый отзыв/предложение')
         item2 = types.KeyboardButton(text='Показать прошлые')
         back = types.KeyboardButton(text='Меню')
         markup_reply.add(item1, item2, back)
-        bot.send_message(message.chat.id, 'Вы хотите написать новый отзыв/предложение или посмотреть и отредактировать старые отызвы/предложения?',
-                         reply_markup=markup_reply)
+        bot.send_message(message.chat.id, 'Вы хотите написать новый отзыв/предложение или посмотреть и отредактировать старые отызвы/предложения?', reply_markup=markup_reply)
     elif message.text == 'Новый отзыв/предложение':
         return new_otzivi(message)
     elif message.text == 'Показать прошлые':
@@ -118,14 +121,13 @@ def get_text(message):
         return spisokprosh(message)
     elif message.text == 'Розыгрыши':
         return dlya_usera(message)
+    elif message.text == 'Карта лояльности':
+        return loyaltycard(message)
+    #elif message.text == 'Дата':
+        #return dataedit(message)
 
 
 @bot.message_handler(func=lambda message: True)
-#def insert_booking(data, time, chel):
-    #cur.execute("INSERT INTO bron' (date, time, chel) VALUES (%s, %s, %s )", (data, time, chel))
-    #con.commit()
-
-
 def data(message):
     msg = bot.send_message(message.chat.id, 'Напишите дату, на которую хотите забронировать стол(формат: дд/мм): ')
     bot.register_next_step_handler(msg, time)
@@ -134,7 +136,7 @@ def data(message):
 def time(message):
     data = message.text
     if not is_date_format(data):
-        msg = bot.send_message(message.chat.id, 'Введите в формате ....')
+        msg = bot.send_message(message.chat.id, 'Пожалуйста, используйте указанный формат')
         bot.register_next_step_handler(msg, time)
         return
     msg = bot.send_message(message.chat.id, 'Напишите время, на которое хотите забронировать стол(формат: 17:00): ')
@@ -152,16 +154,38 @@ def time_handler(message, data):
 
 
 def chel(message, data, time):
-    try:
-        chel = message.text
-        if not chel.isdigit():
-            msg = bot.send_message(message.chat.id, 'Цифрами, пожалуйста')
-            bot.register_next_step_handler(msg, chel)
-            return
-        #insert_booking(data, time, int(chel))
-        bot.send_message(message.chat.id, 'Ваше бронирование: Следующая станция - Сокол, дата: %s , время: %s, количество человек: %s ' % (data, time, chel))
-    except Exception as e:
-        bot.send_message(message.chat.id, 'Цифрами, пожалуйста')
+    chel = message.text
+    if not chel.isdigit():
+        msg = bot.send_message(message.chat.id, 'Цифрами, пожалуйста')
+        bot.register_next_step_handler(msg, chel)
+        return
+    c = con.cursor()
+    c.execute("INSERT INTO bron ( date, time, chel) VALUES ( ?, ?, ?)", (data, time, chel))
+    con.commit()
+    bot.send_message(message.chat.id, 'Ваше бронирование: Следующая станция - Сокол, дата: %s , время: %s, количество человек: %s ' % (data, time, chel))
+
+
+#def editbron(message):
+    #user_id = message.chat.id
+    #cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
+    #result = cur.fetchone()
+    #if result is None:
+        #bot.send_message(message.chat.id, 'На ближайшее время у вас нет активного бронирования')
+    #else:
+        #markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        #item1 = types.KeyboardButton(text='Дата')
+        #item2 = types.KeyboardButton(text='Время')
+        #item3 = types.KeyboardButton(text='Количество гостей')
+        #back = types.KeyboardButton(text='Меню')
+        #markup_reply.add(item1, item2, item3, back)
+        #bot.send_message(message.chat.id, 'Выберите, что вы хотите отредактировать', reply_markup=markup_reply)
+
+
+#def dataedit(message):
+    #cur.execute("SELECT * FROM bron WHERE date = ?", (data,))
+    #result = cur.fetchone()
+    #bot.send_message(message.chat.id, {result})
+
 
 
 def send_mes(message):
@@ -243,11 +267,36 @@ def lastotzivi(message):
     print(message.chat.id)
     global user_id
     user_id = message.chat.id
-    sql = "SELECT otziv FROM otzivi ORDER BY id DESC LIMIT 1"
+    sql = "SELECT otziv FROM otzivi ORDER BY id "
     cur.execute(sql)
     result = cur.fetchone()
     bot.send_message(user_id, {result})
     con.commit()
+
+
+def chislo(message):
+    global beg
+    global end
+    beg = 1
+    end = 1600
+    random_integer = random.randint(beg, end)
+    bot.send_message(message.chat.id, 'Ваш код авторизации: %s' %(random_integer))
+
+
+def loyaltycard(message):
+    user_id = message.chat.id
+    cur.execute("SELECT * FROM loyalty_card WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    if result is None:
+        cardnum = ''.join([str(random.randint(0, 9)) for i in range(16)])
+        cur.execute("INSERT INTO loyalty_card (user_id, cardnum, nakop, giftsbonus, promotebnus, deposit, bonustogift) VALUES (?, ?, 0, 0, 0, 0, 0)", (user_id, cardnum))
+        con.commit()
+        message_text = f"Номер вашей карты: {cardnum}\n\nВы еще не заработали никаких бонусов."
+    else:
+        user_id, cardnum, nakop, giftsbonus, promotebnus, deposit, bonustogift = result
+        message_text = f"Номер вашей карты: {cardnum}\n\nКоличество бонусов:\nНакопленные бонусы: {nakop} руб.\nПодарочные бонусы: {giftsbonus} руб.\nАкционные бонусы: {promotebnus} руб.\nДепозит: {deposit} руб.\nБонусы доступные для дарения другу: {bonustogift} руб."
+
+    bot.send_message(user_id, message_text)
 
 
 bot.polling(none_stop=True, interval=0)
