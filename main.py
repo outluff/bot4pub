@@ -26,18 +26,14 @@ adm = 467752313
 @bot.message_handler(commands=['start'])
 def himes(message):
     markup_reply = types.ReplyKeyboardMarkup()
-    item1 = types.KeyboardButton(text='Код авторизации')
-    item2 = types.KeyboardButton(text='Карта лояльности')
-    item3 = types.KeyboardButton(text='Розыгрыши')
-    item4 = types.KeyboardButton(text='ADMIN')
-    item5 = types.KeyboardButton(text='Где вы находитесь?')
-    item6 = types.KeyboardButton(text='Отзывы и предложения')
-    item7 = types.KeyboardButton(text='Бронирование')
-    item8 = types.KeyboardButton(text='Есть вопрос')
+    reg_button = types.KeyboardButton(text="Share your phone number", request_contact=True)
+    markup_reply.add(reg_button)
+    bot.send_message(message.chat.id, f'{message.from_user.first_name}, NScardbot приветствует тебя!!\nЧтобы идентифицировать тебя мы, в первую очередь, используем твой чат id.\nыТакже нам требуется твой номер телефонаи дата рождения. Если у тебя нет желания оставлять нам свой номер телефона, то, к сожлению, ты не сможешь со мной общаться. ', reply_markup=markup_reply)
 
-    markup_reply.add(item1, item2, item3, item4, item5, item6, item7, item8)
-    bot.send_message(message.chat.id, 'NScardbot приветствует тебя!!', reply_markup=markup_reply)
-
+@bot.message_handler(content_types=['contact'])
+def contact(message):
+    if message.contact is not None:
+    cur.execute("INSERT INTO phonenumber (")
 
 @bot.callback_query_handler(func=lambda call: True)
 def answer(call):
@@ -47,9 +43,17 @@ def answer(call):
 
 @bot.message_handler(content_types=['text'])
 def get_text(message):
+    item1 = types.KeyboardButton(text='Код авторизации')
+    item2 = types.KeyboardButton(text='Карта лояльности')
+    item3 = types.KeyboardButton(text='Розыгрыши')
+    item4 = types.KeyboardButton(text='ADMIN')
+    item5 = types.KeyboardButton(text='Ваш адрес')
+    item6 = types.KeyboardButton(text='Отзывы и предложения')
+    item7 = types.KeyboardButton(text='Бронирование')
+    item8 = types.KeyboardButton(text='Есть вопрос')
     if message.text == 'Код авторизации':
         return chislo(message)
-    elif message.text == 'Где вы находитесь?':
+    elif message.text == 'Ваш адрес':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         item1 = types.KeyboardButton('На карте')
         back = types.KeyboardButton('Меню')
@@ -74,7 +78,7 @@ def get_text(message):
         item2 = types.KeyboardButton(text='Карта лояльности')
         item3 = types.KeyboardButton(text='Розыгрыши')
         item4 = types.KeyboardButton(text='ADMIN')
-        item5 = types.KeyboardButton(text='Где вы находитесь?')
+        item5 = types.KeyboardButton(text='Ваш адрес')
         item6 = types.KeyboardButton(text='Отзывы и предложения')
         item7 = types.KeyboardButton(text='Бронирование')
         item8 = types.KeyboardButton(text='Есть вопрос')
