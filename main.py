@@ -4,12 +4,13 @@ from telebot import types
 import re
 import sqlite3
 import random
+import datetime
 
 con = sqlite3.connect("test.db", check_same_thread=False)
 cur = con.cursor()
 time_re = re.compile(r'^(([01]\d|2[0-3]):([0-5]\d)|24:00)$')
 date_re = re.compile(r'\d\d/\d\d')
-
+dateofbirth_re = re.compile(r'^(0?[1-9]|[12][0-9]|3[01])[/](0?[1-9]|1[0-2])[/](19[4-9]\d|20[01]\d|2020)$')
 
 def is_time_format(s):
     return bool(time_re.match(s))
@@ -17,6 +18,10 @@ def is_time_format(s):
 
 def is_date_format(s):
     return bool(date_re.match(s))
+
+
+def is_dateofbirth_format(s):
+    return bool(dateofbirth_re.match(s))
 
 
 bot = telebot.TeleBot(configure.config['token'], skip_pending=True)
@@ -28,21 +33,34 @@ def himes(message):
     markup_reply = types.ReplyKeyboardMarkup()
     reg_button = types.KeyboardButton(text="Share your phone number", request_contact=True)
     markup_reply.add(reg_button)
-    bot.send_message(message.chat.id, f'{message.from_user.first_name}, NScardbot приветствует тебя!!\nЧтобы идентифицировать тебя мы, в первую очередь, используем твой чат id.\nыТакже нам требуется твой номер телефонаи дата рождения. Если у тебя нет желания оставлять нам свой номер телефона, то, к сожлению, ты не сможешь со мной общаться. ', reply_markup=markup_reply)
+    bot.send_message(message.chat.id, f'{message.from_user.first_name}, NScardbot приветствует тебя!!\nЧтобы идентифицировать тебя мы, в первую очередь, используем твой чат id.\nТакже нам требуется твой номер телефона и дата рождения. Если у тебя нет желания оставлять нам свой номер телефона, то, к сожалению, ты не сможешь со мной общаться. ', reply_markup=markup_reply)
+
 
 @bot.message_handler(content_types=['contact'])
 def contact(message):
     if message.contact is not None:
-    cur.execute("INSERT INTO phonenumber (")
+        user_id = message.chat.id
+        first_name = message.from_user.first_name
+        last_name = message.from_user.last_name
+        phone_number = message.contact.phone_number
+        msg = bot.send_message(user_id, "Введите вашу дату рождения в формате ДД/ММ/ГГГГ (например, 01/01/1990)")
+        bot.register_next_step_handler(msg, process_dob, user_id, phone_number, first_name, last_name)
 
-@bot.callback_query_handler(func=lambda call: True)
-def answer(call):
-    if call.data == 'Оператор':
-        return send_mes(call.message)
 
+def process_dob(message, user_id, phone_number, first_name, last_name):
+    dateofbirth = message.text
+    try:
+        dob = datetime.datetime.strptime(dateofbirth, '%d/%m/%Y')
+        if dob.year < 1945 or dob.year > 2020 or dob.month < 1 or dob.month > 12 or dob.day < 1 or dob.day > 31:
+            raise ValueError()
+    except ValueError:
+        msg = bot.send_message(message.chat.id, 'Некорректная дата рождения. Пожалуйста, введите дату в формате ДД/ММ/ГГГГ')
+        bot.register_next_step_handler(msg, process_dob, user_id, phone_number, first_name, last_name)
+        return
 
-@bot.message_handler(content_types=['text'])
-def get_text(message):
+    cur.execute("INSERT INTO dostup (user_id, phone_number, first_name, last_name, dateofbirth) VALUES (?, ?, ?, ?, ?)", (user_id, phone_number, first_name, last_name, dateofbirth))
+    con.commit()
+    markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = types.KeyboardButton(text='Код авторизации')
     item2 = types.KeyboardButton(text='Карта лояльности')
     item3 = types.KeyboardButton(text='Розыгрыши')
@@ -51,6 +69,24 @@ def get_text(message):
     item6 = types.KeyboardButton(text='Отзывы и предложения')
     item7 = types.KeyboardButton(text='Бронирование')
     item8 = types.KeyboardButton(text='Есть вопрос')
+    markup_reply.add(item1, item2, item3, item4, item5, item6, item7, item8)
+    bot.send_message(message.chat.id, "Спасибо, что вы с нами, теперь выбирайте!", reply_markup=markup_reply)
+
+
+
+
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def answer(call):
+    if call.data == 'Оператор':
+        return send_mes(call.message)
+    elif call.data == 'Участвовать':
+        return uchastie(call.message)
+
+
+@bot.message_handler(content_types=['text'])
+def get_text(message):
     if message.text == 'Код авторизации':
         return chislo(message)
     elif message.text == 'Ваш адрес':
@@ -228,9 +264,11 @@ def new_otzivi(message):
 def for_admin(message):
     print('for_admin')
     print(message.chat.id)
+    global user_id
+    user_id = message.chat.id
     bot.send_message(adm, str(message.text))
-    sql = "INSERT INTO otzivi (otziv) VALUES (?);"
-    cur.execute(sql, (str(message.text),))
+    sql = "INSERT INTO otzivi (user_id, otziv) VALUES (?, ?);"
+    cur.execute(sql, (user_id, str(message.text)))
     con.commit()
 
 def rozigrish(message):
@@ -255,8 +293,20 @@ def dlya_usera(message):
     sql = "SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1"
     cur.execute(sql)
     result = cur.fetchone()
-    bot.send_message(user_id, {result})
     con.commit()
+    markup_inline = types.InlineKeyboardMarkup()
+    item1 = types.InlineKeyboardButton('Участвовать',  callback_data='Участвовать')
+    markup_inline.add(item1)
+    bot.send_message(user_id, {result}, reply_markup=markup_inline)
+
+
+def uchastie(message):
+    user_id = message.chat.id
+    cur.execute("SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1")
+    result = cur.fetchone()
+    cur.execute("INSERT INTO uchastie (user_id, text) VALUES (?, ?)", (user_id,  result[0]))
+    con.commit()
+
 
 def spisokprosh(message):
     print('dlya_usera')
@@ -271,8 +321,8 @@ def lastotzivi(message):
     print(message.chat.id)
     global user_id
     user_id = message.chat.id
-    sql = "SELECT otziv FROM otzivi ORDER BY id "
-    cur.execute(sql)
+    sql = "SELECT otziv FROM otzivi WHERE user_id = ?"
+    cur.execute(sql, (user_id,))
     result = cur.fetchone()
     bot.send_message(user_id, {result})
     con.commit()
