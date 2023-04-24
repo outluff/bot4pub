@@ -129,8 +129,8 @@ def get_text(message):
         bot.send_message(message.chat.id, 'Выбирай', reply_markup=markup_reply)
     elif message.text == 'Новая бронь':
         return data(message)
-    #elif message.text == 'Редактировать бронирование':
-        #return editbron(message)
+    elif message.text == 'Редактировать бронирование':
+        return editbron(message)
 
     elif message.text == 'Отзывы и предложения':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -163,68 +163,120 @@ def get_text(message):
         return dlya_usera(message)
     elif message.text == 'Карта лояльности':
         return loyaltycard(message)
-    #elif message.text == 'Дата':
-        #return dataedit(message)
+    elif message.text == 'Дата':
+        return dataedit(message)
+    elif message.text == 'Время':
+        return timeedit(message)
+    elif message.text == 'Количество гостей':
+        return cheledit(message)
 
 
 @bot.message_handler(func=lambda message: True)
 def data(message):
+    user_id = message.chat.id
     msg = bot.send_message(message.chat.id, 'Напишите дату, на которую хотите забронировать стол(формат: дд/мм): ')
-    bot.register_next_step_handler(msg, time)
+    bot.register_next_step_handler(msg, time, user_id)
 
 
-def time(message):
+def time(message, user_id):
     data = message.text
     if not is_date_format(data):
         msg = bot.send_message(message.chat.id, 'Пожалуйста, используйте указанный формат')
-        bot.register_next_step_handler(msg, time)
+        bot.register_next_step_handler(msg, time, user_id)
         return
     msg = bot.send_message(message.chat.id, 'Напишите время, на которое хотите забронировать стол(формат: 17:00): ')
-    bot.register_next_step_handler(msg, time_handler, data)
+    bot.register_next_step_handler(msg, time_handler, user_id, data)
 
 
-def time_handler(message, data):
+def time_handler(message, user_id, data):
     time = message.text
     if not is_time_format(time):
         msg = bot.send_message(message.chat.id, 'Используйте формат, пожалуйста ')
-        bot.register_next_step_handler(msg, time_handler, data)
+        bot.register_next_step_handler(msg, time_handler, user_id, data)
         return
     msg = bot.send_message(message.chat.id, 'Введите количество гостей:')
-    bot.register_next_step_handler(msg, chel, data, time)
+    bot.register_next_step_handler(msg, chel, user_id, data, time)
 
 
-def chel(message, data, time):
+def chel(message, user_id, data, time):
     chel = message.text
     if not chel.isdigit():
         msg = bot.send_message(message.chat.id, 'Цифрами, пожалуйста')
         bot.register_next_step_handler(msg, chel)
         return
     c = con.cursor()
-    c.execute("INSERT INTO bron ( date, time, chel) VALUES ( ?, ?, ?)", (data, time, chel))
+    c.execute("INSERT INTO bron (user_id, date, time, chel) VALUES (?, ?, ?, ?)", (user_id, data, time, chel))
     con.commit()
     bot.send_message(message.chat.id, 'Ваше бронирование: Следующая станция - Сокол, дата: %s , время: %s, количество человек: %s ' % (data, time, chel))
 
 
-#def editbron(message):
-    #user_id = message.chat.id
-    #cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
-    #result = cur.fetchone()
-    #if result is None:
-        #bot.send_message(message.chat.id, 'На ближайшее время у вас нет активного бронирования')
-    #else:
-        #markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        #item1 = types.KeyboardButton(text='Дата')
-        #item2 = types.KeyboardButton(text='Время')
-        #item3 = types.KeyboardButton(text='Количество гостей')
-        #back = types.KeyboardButton(text='Меню')
-        #markup_reply.add(item1, item2, item3, back)
-        #bot.send_message(message.chat.id, 'Выберите, что вы хотите отредактировать', reply_markup=markup_reply)
+def editbron(message):
+    user_id = message.chat.id
+    cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    if result is None:
+        bot.send_message(message.chat.id, 'На ближайшее время у вас нет активного бронирования')
+    else:
+        markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        item1 = types.KeyboardButton(text='Дата')
+        item2 = types.KeyboardButton(text='Время')
+        item3 = types.KeyboardButton(text='Количество гостей')
+        back = types.KeyboardButton(text='Меню')
+        markup_reply.add(item1, item2, item3, back)
+        bot.send_message(message.chat.id, 'Выберите, что вы хотите отредактировать', reply_markup=markup_reply)
 
 
-#def dataedit(message):
-    #cur.execute("SELECT * FROM bron WHERE date = ?", (data,))
-    #result = cur.fetchone()
-    #bot.send_message(message.chat.id, {result})
+def dataedit(message):
+    user_id = message.chat.id
+    cur.execute("SELECT date FROM bron WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    bot.send_message(message.chat.id, result[0])
+    msg = bot.send_message(message.chat.id, 'Введите новую дату бронирования')
+    bot.register_next_step_handler(msg, dateedit2)
+
+def dateedit2(message):
+    user_id = message.chat.id
+    new_data = str(message.text)
+    cur.execute("UPDATE bron SET date = ? WHERE user_id = ?", (new_data, user_id))
+    con.commit()
+
+
+def timeedit(message):
+    user_id = message.chat.id
+    cur.execute("SELECT time FROM bron WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    bot.send_message(message.chat.id, result[0])
+    msg = bot.send_message(message.chat.id, 'Введите новое время бронирования')
+    bot.register_next_step_handler(msg, timeedit2)
+
+
+def timeedit2(message):
+    user_id = message.chat.id
+    new_time = str(message.text)
+    cur.execute("UPDATE bron SET time = ? WHERE user_id =?", (new_time, user_id))
+    con.commit()
+
+
+def cheledit(message):
+    user_id = message.chat.id
+    cur.execute("SELECT chel FROM bron WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    bot.send_message(message.chat.id, result[0])
+    msg = bot.send_message(message.chat.id, 'Введите количество гостей')
+    bot.register_next_step_handler(msg, cheledit2)
+
+
+def cheledit2(message):
+    user_id = message.chat.id
+    new_chel = str(message.text)
+    cur.execute("UPDATE bron SET chel = ? WHERE user_id = ?", (new_chel, user_id))
+    msg = bot.send_message(message.chat.id, 'Бронирование изменено')
+    bot.register_next_step_handler(msg, cheledit3, new_chel)
+
+
+def cheledit3(message, new_chel):
+    user_id = message.chat.id
+    cur.execute()
 
 
 
