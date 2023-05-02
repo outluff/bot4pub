@@ -85,20 +85,6 @@ def answer(call):
         return uchastie(call.message)
 
 
-def handle_callback_query(call):
-    callback_data = call.data
-    try:
-        if call.message:
-            if callback_data.startswith('edit_bron:'):
-                booking_id = int(callback_data.split(':')[1])
-                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
-                bot.send_message(call.message.chat.id, f"Вы выбрали бронирование с id {booking_id}")
-                bot.answer_callback_query(callback_query_id=call.id, text="Вы выбрали бронирование")
-                bot.register_next_step_handler(call.message, edit_bron_handler, booking_id)
-    except Exception as e:
-        print(e)
-
-
 @bot.message_handler(content_types=['text'])
 def get_text(message):
     if message.text == 'Код авторизации':
@@ -144,7 +130,7 @@ def get_text(message):
     elif message.text == 'Новая бронь':
         return data(message)
     elif message.text == 'Редактировать бронирование':
-        return editbron(message)
+        return book_table(message)
 
     elif message.text == 'Отзывы и предложения':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -266,42 +252,78 @@ def chel(message, user_id, data, time):
     con.commit()
     bot.send_message(message.chat.id, 'Ваше бронирование: Следующая станция - Сокол, дата: %s , время: %s, количество человек: %s ' % (data, time, chel))
 
-@bot.callback_query_handler(func=lambda call: True)
-def process_callback_edit_bron(call):
-    booking_id = int(call.data.split(':')[1])
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id)
-    bot.send_message(call.message.chat.id, f"Вы выбрали бронирование с id {booking_id}")
-    bot.answer_callback_query(callback_query_id=call.id, text="Вы выбрали бронирование")
-    bot.register_next_step_handler(call.message, edit_bron_handler, booking_id)
 
-@bot.inline_handler(lambda query: True)
-def editbron(message):
+def book_table(message):
     user_id = message.chat.id
-    cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
-    results = cur.fetchall()
-    if not results:
-        bot.send_message(message.chat.id, "У вас нет бронирований")
+    # Проверка количества бронирований пользователя в БД
+    num_bookings = get_user_bookings_count(user_id)
+    if num_bookings == 0:
+        # Пользователь не имеет ни одного бронирования
+        bot.send_message(message.chat.id, "У вас нет текущих бронирований.")
+        return data(message)
+    elif num_bookings == 1:
+        bron_id = get_user_booking_id(user_id)
+        show_booking_info(message.chat.id, bron_id)
+        msg = bot.send_message(message.chat.id, "Выберите что вы хотите отредактировать")
+        bot.register_next_step_handler(msg, edit_bron_handler)
     else:
-        if len(results) == 1:
-            booking_id, user_id, date, time, chel = results[0]
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            item1 = types.KeyboardButton(text="Дата")
-            item2 = types.KeyboardButton(text="Время")
-            item3 = types.KeyboardButton(text="Количество гостей")
-            item4 = types.KeyboardButton(text="Отменить бронирование")
-            item5 = types.KeyboardButton(text="Меню")
-            markup.row(item1, item2)
-            markup.row(item3, item4)
-            markup.add(item5)
-            bot.send_message(message.chat.id, f"Ваше бронирование: \nДата: {date} \nВремя: {time} \nКоличество гостей: {chel}",
-                             reply_markup=markup)
-            bot.register_next_step_handler(message, edit_bron_handler, booking_id)
-        else:
-            markup = types.InlineKeyboardMarkup()
-            for row in results:
-                booking_id, user_id, date, time, chel = row
-                markup.add(types.InlineKeyboardButton(text=f"{date} {time}", callback_data=f"edit_bron:{booking_id}"))
-            bot.send_message(message.chat.id, "У вас несколько бронирований, выберите, какое вы хотите отредактировать:", reply_markup=markup)
+        keyboard = create_booking_keyboard(user_id)  # Создаем клавиатуру с выбором бронирования
+        bot.send_message(message.chat.id, "Выберите бронирование для редактирования:", reply_markup=keyboard)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('edit_booking:'))
+def edit_booking(call):
+    bron_id = call.data.split(':')[1]  # Получаем идентификатор выбранного бронирования
+    show_booking_info(call.message.chat.id, bron_id)  # Отображаем информацию о бронировании
+    msg = bot.send_message(call.message.chat.id, "Выберите что вы хотите отредактировать")
+    bot.register_next_step_handler(msg, edit_bron_handler)
+
+
+def get_user_bookings_count(user_id):
+    cur.execute("SELECT COUNT(*) FROM bron WHERE user_id = ?", (user_id,))
+    count = cur.fetchone()[0]
+    return count
+
+
+def get_user_booking_id(user_id):
+    cur.execute("SELECT id FROM bron WHERE user_id = ?", (user_id,))
+    bron_id = cur.fetchone()
+    if bron_id:
+        return bron_id[0]
+    return None
+
+
+def show_booking_info(chat_id, bron_id):
+    cur.execute("SELECT * FROM bron WHERE id = ?", (bron_id,))
+    booking_info = cur.fetchone()
+    if booking_info:
+        date = booking_info[2]
+        time = booking_info[3]
+        chel = booking_info[4]
+        bot.send_message(chat_id, f"Информация о бронировании {bron_id}:\nДата: {date}\nВремя: {time} \nКоличество гостей: {chel}")
+    else:
+        bot.send_message(chat_id, "Бронирование не найдено")
+    msg = bot.send_message(chat_id, "Продолжаем")
+    bot.register_next_step_handler(msg, edit_bron_handler)
+
+
+def create_booking_keyboard(user_id):
+    keyboard = types.InlineKeyboardMarkup()
+    bookings = get_user_bookings(user_id)
+    for booking in bookings:
+        bron_id = booking[0]
+        date = booking[2]
+        time = booking[3]
+        chel = booking[4]
+        booking_info = f"Дата: {date} Время: {time} Количество гостей: {chel}"
+        callback_data = f"edit_booking:{bron_id}"
+        keyboard.add(types.InlineKeyboardButton(text=booking_info, callback_data=callback_data))
+    return keyboard
+
+def get_user_bookings(user_id):
+    cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
+    bookings = cur.fetchall()
+    return bookings
 
 
 def edit_bron_handler(message, bron_id):
@@ -344,7 +366,6 @@ def update_bron_time(message, booking_id):
         bot.register_next_step_handler(message, edit_bron_handler, booking_id)
 
 
-
 def update_bron_guests(message, booking_id):
     chel = message.text
     if not chel.isdigit():
@@ -355,7 +376,6 @@ def update_bron_guests(message, booking_id):
         con.commit()
         bot.send_message(message.chat.id, "Количество гостей в бронировании обновлено!")
         bot.register_next_step_handler(message, edit_bron_handler, booking_id)
-
 
 
 def send_mes(message):
@@ -375,7 +395,6 @@ def forward_usr(message):
     print(message.chat.id)
     global user_id
     user_id = message.chat.id
-
     msg = bot.send_message(adm, 'Введи ответ на вопрос')
     bot.register_next_step_handler(msg, forward_usr_1)
 
@@ -410,7 +429,7 @@ def dlya_admina(message):
     print('dlya_admina')
     print(message.chat.id)
     bot.send_message(adm, str(message.text))
-    sql = "INSERT INTO rosigrishi (text) VALUES (?);"
+    sql = "INSERT INTO rosigrishi (text_ros) VALUES (?);"
     cur.execute(sql, (str(message.text),))
     con.commit()
 
@@ -420,21 +439,21 @@ def dlya_usera(message):
     print(message.chat.id)
     global user_id
     user_id = message.chat.id
-    sql = "SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1"
+    sql = "SELECT text_ros FROM rosigrishi ORDER BY id DESC LIMIT 1"
     cur.execute(sql)
     result = cur.fetchone()
-    con.commit()
     markup_inline = types.InlineKeyboardMarkup()
     item1 = types.InlineKeyboardButton('Участвовать',  callback_data='Участвовать')
     markup_inline.add(item1)
     bot.send_message(user_id, {result}, reply_markup=markup_inline)
+    con.commit()
 
 
 def uchastie(message):
     user_id = message.chat.id
-    cur.execute("SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1")
+    cur.execute("SELECT text_ros FROM rosigrishi ORDER BY id DESC LIMIT 1")
     result = cur.fetchone()
-    cur.execute("INSERT INTO uchastie (user_id, text) VALUES (?, ?)", (user_id,  result[0].encode('utf-8')))
+    cur.execute("INSERT INTO uchastie (user_id, text_uch) VALUES (?, ?)", (user_id,  result[0]))
     con.commit()
     bot.send_message(message.chat.id, 'Вы занесены в базу участников этого розыгрыша!')
 
@@ -442,7 +461,7 @@ def uchastie(message):
 def spisokprosh(message):
     print('dlya_usera')
     print(message.chat.id)
-    cur.execute('SELECT text FROM rosigrishi ORDER BY id')
+    cur.execute('SELECT text_ros FROM rosigrishi ORDER BY id')
     for row in cur:
         bot.send_message(message.chat.id, row)
 
@@ -485,23 +504,22 @@ def loyaltycard(message):
 
 
 def pobeditel(message):
-    cur.execute("""
-        SELECT COUNT(*) as total_participants FROM uchastie
-        WHERE text = (
-            SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1
-        )
-    """)
-    result = cur.fetchone()
-    bot.send_message(message.chat.id, f"Общее количество участников последнего розыгрыша: {result[0]}")
+    cur.execute("SELECT text_ros FROM rosigrishi ORDER BY id DESC LIMIT 1")
+    last_draw = cur.fetchone()[0]
 
-    cur.execute("""
-        SELECT * FROM uchastie
-        WHERE text = (
-            SELECT text FROM rosigrishi ORDER BY id DESC LIMIT 1
-        ) ORDER BY RANDOM() LIMIT 1
-    """)
-    result = cur.fetchone()
-    bot.send_message(message.chat.id, f"Победитель: {result}")
+    # Получение количества участников последнего розыгрыша
+    cur.execute("SELECT COUNT(*) FROM uchastie WHERE text_uch = ?", (last_draw,))
+    total_participants = cur.fetchone()[0]
+
+    # Выбор случайного победителя
+    cur.execute("SELECT user_id, text_uch FROM uchastie WHERE text_uch = ?", (last_draw,))
+    participants = cur.fetchall()
+    random_winner = random.choice(participants)
+
+    # Вывод информации на экран админа
+    response = f"Общее количество участников последнего розыгрыша: {total_participants}\n"
+    response += f"Случайный победитель:\nИдентификатор пользователя: {random_winner[0]}\nТекст розыгрыша: {random_winner[1]}"
+    bot.send_message(message.chat.id, response)
 
 
 bot.polling(none_stop=True, interval=0)
