@@ -8,16 +8,20 @@ import datetime
 
 con = sqlite3.connect("test.db", check_same_thread=False)
 cur = con.cursor()
-time_re = re.compile(r'^(([01]\d|2[0-3]):([0-5]\d)|24:00)$')
-date_re = re.compile(r'\d\d/\d\d')
 dateofbirth_re = re.compile(r'^(0?[1-9]|[12][0-9]|3[01])[/](0?[1-9]|1[0-2])[/](19[4-9]\d|20[01]\d|2020)$')
 
-def is_time_format(s):
-    return bool(time_re.match(s))
+def is_time_format(time):
+    if not re.match(r'\d\d:\d\d', time):
+        return False
+    hour, minute = map(int, time.split(':'))
+    return 0 <= hour <= 23 and 0 <= minute <= 59
 
 
-def is_date_format(s):
-    return bool(date_re.match(s))
+def is_date_format(date):
+    if not re.match(r'\d\d/\d\d', date):
+        return False
+    day = int(date.split('/')[0])
+    return 0 < day <= 31
 
 
 def is_dateofbirth_format(s):
@@ -65,7 +69,7 @@ def process_dob(message, user_id, phone_number, first_name, last_name):
     item2 = types.KeyboardButton(text='Карта лояльности')
     item3 = types.KeyboardButton(text='Розыгрыши')
     item4 = types.KeyboardButton(text='ADMIN')
-    item5 = types.KeyboardButton(text='Ваш адрес')
+    item5 = types.KeyboardButton(text='Где вы находитесь?')
     item6 = types.KeyboardButton(text='Отзывы и предложения')
     item7 = types.KeyboardButton(text='Бронирование')
     item8 = types.KeyboardButton(text='Есть вопрос')
@@ -77,24 +81,25 @@ def process_dob(message, user_id, phone_number, first_name, last_name):
 
 
 
-@bot.callback_query_handler(func=lambda call: True)
+@bot.callback_query_handler(func=lambda call: call.data == 'Оператор' or call.data == 'Участвовать')
 def answer(call):
     if call.data == 'Оператор':
         return send_mes(call.message)
     elif call.data == 'Участвовать':
         return uchastie(call.message)
 
-
+ 
 @bot.message_handler(content_types=['text'])
 def get_text(message):
     if message.text == 'Код авторизации':
         return chislo(message)
-    elif message.text == 'Ваш адрес':
+    elif message.text == 'Где вы находитесь?':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         item1 = types.KeyboardButton('На карте')
+        item2 = types.KeyboardButton('Бронирование')
         back = types.KeyboardButton('Меню')
-        markup_reply.add(item1, back)
-        bot.send_message(message.chat.id, "г. Москва, Улица Балтийская, дом 3", reply_markup=markup_reply)
+        markup_reply.add(item1, item2, back)
+        bot.send_message(message.chat.id, "г. Москва, Улица Балтийская, дом 3\nРаботаем с 17:00 до упора\nDog-Friendly", reply_markup=markup_reply)
     elif message.text == 'На карте':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         back = types.KeyboardButton('Меню')
@@ -114,7 +119,7 @@ def get_text(message):
         item2 = types.KeyboardButton(text='Карта лояльности')
         item3 = types.KeyboardButton(text='Розыгрыши')
         item4 = types.KeyboardButton(text='ADMIN')
-        item5 = types.KeyboardButton(text='Ваш адрес')
+        item5 = types.KeyboardButton(text='Где вы находитесь?')
         item6 = types.KeyboardButton(text='Отзывы и предложения')
         item7 = types.KeyboardButton(text='Бронирование')
         item8 = types.KeyboardButton(text='Есть вопрос')
@@ -131,7 +136,6 @@ def get_text(message):
         return data(message)
     elif message.text == 'Редактировать бронирование':
         return book_table(message)
-
     elif message.text == 'Отзывы и предложения':
         markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
         item1 = types.KeyboardButton(text='Новый отзыв/предложение')
@@ -172,8 +176,8 @@ def get_text(message):
 def add_booking(user_id, date, time, chel):
     cur.execute("INSERT INTO bron (user_id, date, time, chel) VALUES (?, ?, ?, ?)", (user_id, date, time, chel))
     con.commit()
-    booking_id = cur.lastrowid
-    return booking_id
+    bron_id = cur.lastrowid
+    return bron_id
 
 
 def data(message):
@@ -183,7 +187,7 @@ def data(message):
         item2 = types.KeyboardButton(text='Карта лояльности')
         item3 = types.KeyboardButton(text='Розыгрыши')
         item4 = types.KeyboardButton(text='ADMIN')
-        item5 = types.KeyboardButton(text='Ваш адрес')
+        item5 = types.KeyboardButton(text='Где вы находитесь?')
         item6 = types.KeyboardButton(text='Отзывы и предложения')
         item7 = types.KeyboardButton(text='Бронирование')
         item8 = types.KeyboardButton(text='Есть вопрос')
@@ -212,7 +216,7 @@ def time_handler(message, user_id, data):
         item2 = types.KeyboardButton(text='Карта лояльности')
         item3 = types.KeyboardButton(text='Розыгрыши')
         item4 = types.KeyboardButton(text='ADMIN')
-        item5 = types.KeyboardButton(text='Ваш адрес')
+        item5 = types.KeyboardButton(text='Где вы находитесь?')
         item6 = types.KeyboardButton(text='Отзывы и предложения')
         item7 = types.KeyboardButton(text='Бронирование')
         item8 = types.KeyboardButton(text='Есть вопрос')
@@ -235,7 +239,7 @@ def chel(message, user_id, data, time):
         item2 = types.KeyboardButton(text='Карта лояльности')
         item3 = types.KeyboardButton(text='Розыгрыши')
         item4 = types.KeyboardButton(text='ADMIN')
-        item5 = types.KeyboardButton(text='Ваш адрес')
+        item5 = types.KeyboardButton(text='Где вы находитесь?')
         item6 = types.KeyboardButton(text='Отзывы и предложения')
         item7 = types.KeyboardButton(text='Бронирование')
         item8 = types.KeyboardButton(text='Есть вопрос')
@@ -250,33 +254,55 @@ def chel(message, user_id, data, time):
     c = con.cursor()
     c.execute("INSERT INTO bron (user_id, date, time, chel) VALUES (?, ?, ?, ?)", (user_id, data, time, chel))
     con.commit()
+    admin_chat_id = 467752313
+    cur.execute("SELECT first_name FROM dostup where user_id=?", (user_id,))
+    result = cur.fetchone()
+    cur.execute("SELECT phone_number FROM dostup where user_id=?", (user_id,))
+    resultph = cur.fetchone()
+    booking_info = f"Посетитель: {result} Номер телефона: {resultph}\nНовая бронь:\nДата: {data}\nВремя: {time}\nКоличество гостей: {chel}"
+    con.commit()
+    bot.send_message(admin_chat_id, booking_info)
     bot.send_message(message.chat.id, 'Ваше бронирование: Следующая станция - Сокол, дата: %s , время: %s, количество человек: %s ' % (data, time, chel))
 
-
+@bot.message_handler(func=lambda message: True)
 def book_table(message):
     user_id = message.chat.id
+    bron_id = get_user_booking_id(user_id)
     # Проверка количества бронирований пользователя в БД
     num_bookings = get_user_bookings_count(user_id)
     if num_bookings == 0:
-        # Пользователь не имеет ни одного бронирования
         bot.send_message(message.chat.id, "У вас нет текущих бронирований.")
         return data(message)
     elif num_bookings == 1:
-        bron_id = get_user_booking_id(user_id)
         show_booking_info(message.chat.id, bron_id)
-        msg = bot.send_message(message.chat.id, "Выберите что вы хотите отредактировать")
-        bot.register_next_step_handler(msg, edit_bron_handler)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        item1 = types.KeyboardButton('Дата')
+        item2 = types.KeyboardButton('Время')
+        item3 = types.KeyboardButton('Количество гостей')
+        item4 = types.KeyboardButton('Отменить бронирование')
+        item5 = types.KeyboardButton('Меню')
+        markup.add(item1, item2, item3, item4, item5)
+        bot.send_message(message.chat.id, 'Выберите что вы хоите отредактировать', reply_markup=markup)
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
     else:
         keyboard = create_booking_keyboard(user_id)  # Создаем клавиатуру с выбором бронирования
         bot.send_message(message.chat.id, "Выберите бронирование для редактирования:", reply_markup=keyboard)
+        bot.register_callback_query_handler(lambda call: call.data.startswith('edit_booking:'), edit_booking)
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('edit_booking:'))
 def edit_booking(call):
     bron_id = call.data.split(':')[1]  # Получаем идентификатор выбранного бронирования
     show_booking_info(call.message.chat.id, bron_id)  # Отображаем информацию о бронировании
-    msg = bot.send_message(call.message.chat.id, "Выберите что вы хотите отредактировать")
-    bot.register_next_step_handler(msg, edit_bron_handler)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    item1 = types.KeyboardButton('Дата')
+    item2 = types.KeyboardButton('Время')
+    item3 = types.KeyboardButton('Количество гостей')
+    item4 = types.KeyboardButton('Отменить бронирование')
+    item5 = types.KeyboardButton('Меню')
+    markup.add(item1, item2, item3, item4, item5)
+    bot.send_message(call.message.chat.id, 'Выберите, что вы хотите отредактировать:', reply_markup=markup)
+    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
+    bot.register_next_step_handler(call.message, edit_bron_handler, bron_id=bron_id)
 
 
 def get_user_bookings_count(user_id):
@@ -286,7 +312,7 @@ def get_user_bookings_count(user_id):
 
 
 def get_user_booking_id(user_id):
-    cur.execute("SELECT id FROM bron WHERE user_id = ?", (user_id,))
+    cur.execute("SELECT bron_id FROM bron WHERE user_id = ?", (user_id,))
     bron_id = cur.fetchone()
     if bron_id:
         return bron_id[0]
@@ -294,7 +320,7 @@ def get_user_booking_id(user_id):
 
 
 def show_booking_info(chat_id, bron_id):
-    cur.execute("SELECT * FROM bron WHERE id = ?", (bron_id,))
+    cur.execute("SELECT * FROM bron WHERE bron_id = ?", (bron_id,))
     booking_info = cur.fetchone()
     if booking_info:
         date = booking_info[2]
@@ -303,22 +329,21 @@ def show_booking_info(chat_id, bron_id):
         bot.send_message(chat_id, f"Информация о бронировании {bron_id}:\nДата: {date}\nВремя: {time} \nКоличество гостей: {chel}")
     else:
         bot.send_message(chat_id, "Бронирование не найдено")
-    msg = bot.send_message(chat_id, "Продолжаем")
-    bot.register_next_step_handler(msg, edit_bron_handler)
 
 
 def create_booking_keyboard(user_id):
     keyboard = types.InlineKeyboardMarkup()
     bookings = get_user_bookings(user_id)
     for booking in bookings:
-        bron_id = booking[0]
+        booking_id = booking[0]
         date = booking[2]
         time = booking[3]
         chel = booking[4]
         booking_info = f"Дата: {date} Время: {time} Количество гостей: {chel}"
-        callback_data = f"edit_booking:{bron_id}"
+        callback_data = f"edit_booking:{booking_id}"
         keyboard.add(types.InlineKeyboardButton(text=booking_info, callback_data=callback_data))
     return keyboard
+
 
 def get_user_bookings(user_id):
     cur.execute("SELECT * FROM bron WHERE user_id = ?", (user_id,))
@@ -327,55 +352,68 @@ def get_user_bookings(user_id):
 
 
 def edit_bron_handler(message, bron_id):
-    user_input = message.text
-    if user_input == "Дата":
+    if message.text == "Дата":
         bot.send_message(message.chat.id, "Введите новую дату в формате ДД/ММ")
         bot.register_next_step_handler(message, update_bron_date, bron_id)
-    elif user_input == "Время":
+    elif message.text == "Время":
         bot.send_message(message.chat.id, "Введите новое время в формате ЧЧ:ММ")
         bot.register_next_step_handler(message, update_bron_time, bron_id)
-    elif user_input == "Количество гостей":
+    elif message.text == "Количество гостей":
         bot.send_message(message.chat.id, "Введите новое количество гостей")
         bot.register_next_step_handler(message, update_bron_guests, bron_id)
-    elif user_input == "Отменить бронирование":
-        cur.execute("DELETE FROM bron WHERE booking_id=?", (bron_id,))
+    elif message.text == "Отменить бронирование":
+        cur.execute("DELETE FROM bron WHERE bron_id=?", (bron_id,))
         con.commit()
         bot.send_message(message.chat.id, "Бронирование отменено")
-    else:
-        bot.send_message(message.chat.id, "Выберите пункт меню")
-        bot.register_next_step_handler(message, edit_bron_handler, bron_id)
+        bot.register_next_step_handler(message, edit_bron_handler, None)
+    elif message.text == 'Меню':
+        markup_reply = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        item1 = types.KeyboardButton(text='Код авторизации')
+        item2 = types.KeyboardButton(text='Карта лояльности')
+        item3 = types.KeyboardButton(text='Розыгрыши')
+        item4 = types.KeyboardButton(text='ADMIN')
+        item5 = types.KeyboardButton(text='Где вы находитесь?')
+        item6 = types.KeyboardButton(text='Отзывы и предложения')
+        item7 = types.KeyboardButton(text='Бронирование')
+        item8 = types.KeyboardButton(text='Есть вопрос')
+        markup_reply.add(item1, item2, item3, item4, item5, item6, item7, item8)
+        bot.send_message(message.chat.id, "Выберите пункт меню", reply_markup=markup_reply)
 
 
-def update_bron_date(message, booking_id):
+def update_bron_date(message, bron_id):
     new_date = message.text
-    cur.execute("UPDATE bron SET date=? WHERE booking_id=?", (new_date, booking_id))
-    con.commit()
-    bot.send_message(message.chat.id, "Дата успешно изменена")
-    bot.register_next_step_handler(message, edit_bron_handler, booking_id)
-
-
-def update_bron_time(message, booking_id):
-    time = message.text
-    if not re.match(r'\d{2}:\d{2}', time):
-        bot.send_message(message.chat.id, "Неверный формат времени. Введите время в формате ЧЧ:ММ")
-        bot.register_next_step_handler(message, update_bron_time, booking_id)
+    if not is_date_format(new_date):
+        bot.send_message(message.chat.id, 'Пожалуйста, используйте указанный формат')
+        bot.register_next_step_handler(message, update_bron_date, bron_id=bron_id)
     else:
-        cur.execute("UPDATE bron SET time=? WHERE booking_id=?", (time, booking_id))
+        cur.execute("UPDATE bron SET date=? WHERE bron_id=?", (new_date, bron_id))
+        con.commit()
+        bot.send_message(message.chat.id, "Дата успешно изменена")
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
+
+
+def update_bron_time(message, bron_id):
+    new_time = message.text
+    if not is_time_format(new_time):
+        bot.send_message(message.chat.id, "Неверный формат времени. Введите время в формате ЧЧ:ММ")
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
+    else:
+        cur.execute("UPDATE bron SET time=? WHERE bron_id=?", (new_time, bron_id))
         con.commit()
         bot.send_message(message.chat.id, "Время бронирования обновлено!")
-        bot.register_next_step_handler(message, edit_bron_handler, booking_id)
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
 
 
-def update_bron_guests(message, booking_id):
-    chel = message.text
-    if not chel.isdigit():
+def update_bron_guests(message, bron_id):
+    new_chel = message.text
+    if not new_chel.isdigit():
         bot.send_message(message.chat.id, "Количество гостей должно быть числом. Введите количество гостей еще раз.")
-        bot.register_next_step_handler(message, update_bron_guests, booking_id)
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
     else:
-        cur.execute("UPDATE bron SET chel=? WHERE booking_id=?", (chel, booking_id))
+        cur.execute("UPDATE bron SET chel=? WHERE bron_id=?", (new_chel, bron_id))
         con.commit()
         bot.send_message(message.chat.id, "Количество гостей в бронировании обновлено!")
-        bot.register_next_step_handler(message, edit_bron_handler, booking_id)
+        bot.register_next_step_handler(message, edit_bron_handler, bron_id=bron_id)
 
 
 def send_mes(message):
