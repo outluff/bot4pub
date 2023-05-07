@@ -161,7 +161,7 @@ def get_text(message):
         else:
             bot.send_message(message.chat.id, 'У вас нет доступа')
     elif message.text == 'Добавить новый розыгрыш':
-        return rozigrish(message)
+        return nameofros(message)
     elif message.text == 'Список прошлых розыгрышей':
         return spisokprosh(message)
     elif message.text == 'Розыгрыши':
@@ -458,32 +458,50 @@ def for_admin(message):
     cur.execute(sql, (user_id, str(message.text)))
     con.commit()
 
-def rozigrish(message):
-    msg = bot.send_message(message.chat.id, 'Введите новый розыгрыш')
+
+previous_nameofros = None
+
+
+def nameofros(message):
+    msg = bot.send_message(message.chat.id, 'Введите название розыгрыша')
     bot.register_next_step_handler(msg, dlya_admina)
 
 
 def dlya_admina(message):
+    global previous_nameofros
     print('dlya_admina')
     print(message.chat.id)
     bot.send_message(adm, str(message.text))
-    sql = "INSERT INTO rosigrishi (text_ros) VALUES (?);"
+    sql = "INSERT INTO rosigrishi (nameofros) VALUES (?);"
     cur.execute(sql, (str(message.text),))
     con.commit()
+    previous_nameofros = str(message.text)
+    msg = bot.send_message(message.chat.id, 'Введите текст розыгрыша')
+    bot.register_next_step_handler(msg, dlya_admina2)
 
+
+def dlya_admina2(message):
+    print('dlya_admina2')
+    print(message.chat.id)
+    bot.send_message(adm, str(message.text))
+    sql = "UPDATE rosigrishi SET text_ros = ? WHERE nameofros = ?"
+    cur.execute(sql, (str(message.text), str(previous_nameofros)))
+    con.commit()
 
 def dlya_usera(message):
     print('dlya_usera')
     print(message.chat.id)
     global user_id
     user_id = message.chat.id
-    sql = "SELECT text_ros FROM rosigrishi ORDER BY id DESC LIMIT 1"
+    sql = "SELECT nameofros FROM rosigrishi ORDER BY id DESC LIMIT 1"
     cur.execute(sql)
-    result = cur.fetchone()
+    resultname = cur.fetchone()
+    cur.execute("SELECT text_ros FROM rosigrishi ORDER BY id DESC LIMIT 1")
+    resulttext = cur.fetchone()
     markup_inline = types.InlineKeyboardMarkup()
     item1 = types.InlineKeyboardButton('Участвовать',  callback_data='Участвовать')
     markup_inline.add(item1)
-    bot.send_message(user_id, {result}, reply_markup=markup_inline)
+    bot.send_message(user_id, f"{resultname[0]} \n{resulttext[0]}", reply_markup=markup_inline)
     con.commit()
 
 
