@@ -155,8 +155,9 @@ def get_text(message):
             item1 = types.KeyboardButton(text='Добавить новый розыгрыш')
             item2 = types.KeyboardButton(text='Список прошлых розыгрышей')
             item3  = types.KeyboardButton(text='Выбрать победителя последнего розыгрыша')
+            item4 = types.KeyboardButton(text='Рассылка')
             back = types.KeyboardButton(text='Меню')
-            markup_reply.add(item1, item2, item3, back)
+            markup_reply.add(item1, item2, item3, item4, back)
             bot.send_message(message.chat.id, 'Гуд ебининг', reply_markup=markup_reply)
         else:
             bot.send_message(message.chat.id, 'У вас нет доступа')
@@ -170,6 +171,8 @@ def get_text(message):
         return loyaltycard(message)
     elif message.text == 'Выбрать победителя последнего розыгрыша':
         return pobeditel(message)
+    elif message.text == 'Рассылка':
+        return rassilka(message)
 
 
 @bot.message_handler(func=lambda message: True)
@@ -515,11 +518,14 @@ def uchastie(message):
 
 
 def spisokprosh(message):
-    print('dlya_usera')
+    print('spisokprosh')
     print(message.chat.id)
-    cur.execute('SELECT text_ros FROM rosigrishi ORDER BY id')
-    for row in cur:
-        bot.send_message(message.chat.id, row)
+    cur.execute('SELECT nameofros, text_ros FROM rosigrishi ORDER BY id DESC')
+    result = cur.fetchall()
+    for row in result:
+        name = row[0]
+        text = row[1]
+        bot.send_message(message.chat.id, f"{name}\n{text}")
 
 
 def lastotzivi(message):
@@ -576,6 +582,50 @@ def pobeditel(message):
     response = f"Общее количество участников последнего розыгрыша: {total_participants}\n"
     response += f"Случайный победитель:\nИдентификатор пользователя: {random_winner[0]}\nТекст розыгрыша: {random_winner[1]}"
     bot.send_message(message.chat.id, response)
+
+
+def rassilka(message):
+        msg = bot.send_message(message.chat.id, 'Введите сообщение для рассылки:')
+        msg.admin_id = message.from_user.id
+        bot.register_next_step_handler(msg, get_message_to_send)
+
+
+def get_message_to_send(message):
+        global message_to_send
+        message_to_send = message.text
+        markup = types.InlineKeyboardMarkup()
+        confirm_button = types.InlineKeyboardButton('Подтвердить', callback_data='confirm_broadcast')
+        edit_button = types.InlineKeyboardButton('Редактировать', callback_data='edit_broadcast')
+        markup.add(confirm_button, edit_button)
+        bot.send_message(message.chat.id, f'Вы хотите разослать следующее сообщение: \n\n{message_to_send}\n\nПодтвердите отправку.', reply_markup=markup)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'confirm_broadcast')
+def send_message_to_all_users(call):
+    cur.execute("SELECT user_id FROM dostup")
+    users = cur.fetchall()
+    for user in users:
+        bot.send_message(user[0], message_to_send)
+    if call.message.reply_to_message:
+        bot.delete_message(call.message.chat.id, call.message.reply_to_message.message_id)
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    else:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'edit_broadcast')
+def edit_rassilka(call):
+        msg = bot.send_message(call.message.chat.id, f'Введите новое сообщение для рассылки:\n\n(текущее сообщение: {message_to_send})')
+        msg.admin_id = call.from_user.id
+        bot.register_next_step_handler(msg, edit_message_to_send)
+
+def edit_message_to_send(call):
+    markup = types.InlineKeyboardMarkup()
+    confirm_button = types.InlineKeyboardButton('Подтвердить', callback_data='confirm_broadcast')
+    markup.add(confirm_button)
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                          text=f'Введите новое сообщение:\n\n{message_to_send}', reply_markup=markup)
+    bot.register_next_step_handler(call.message, get_message_to_send)
 
 
 bot.polling(none_stop=True, interval=0)
